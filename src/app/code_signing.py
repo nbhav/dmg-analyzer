@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-"""
-02_code_signing.py
-Checks code signature, entitlements, notarization status,
-and team/developer identity.
-Note: codesign verification requires macOS; inside Linux container
-we parse what we can from CodeResources and Info.plist.
-"""
 import json
 import plistlib
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+
+from utils.log import get_logger, setup
+
+log = get_logger("code_signing")
 
 
 def run(cmd: list, timeout: int = 10) -> tuple[int, str, str]:
+    """Run a subprocess and return (returncode, stdout, stderr), returning (-1, '', error) on failure."""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return r.returncode, r.stdout.strip(), r.stderr.strip()
-    except Exception as e:
+    except subprocess.TimeoutExpired as e:
+        log.debug("command timed out %s: %s", cmd[0], e)
+        return -1, "", str(e)
+    except (FileNotFoundError, OSError) as e:
+        log.debug("command failed %s: %s", cmd[0], e)
         return -1, "", str(e)
 
 
 def find_app(extract_dir: Path) -> Path | None:
+    """Return the first .app bundle directory found under extract_dir."""
     for p in extract_dir.rglob("*.app"):
         if p.is_dir():
             return p
@@ -29,10 +33,9 @@ def find_app(extract_dir: Path) -> Path | None:
 
 
 def parse_entitlements(app: Path) -> dict:
-    """Parse entitlements from CodeResources or embedded signature."""
+    """Extract entitlements from the main binary's embedded signature via codesign."""
     entitlements = {}
 
-    # Try embedded entitlements plist inside the binary
     binary_dir = app / "Contents" / "MacOS"
     if binary_dir.exists():
         for binary in binary_dir.iterdir():
@@ -42,36 +45,41 @@ def parse_entitlements(app: Path) -> dict:
                     try:
                         data = plistlib.loads(out.encode())
                         entitlements = data
-                    except Exception:
-                        pass
+                    except (plistlib.InvalidFileException, UnicodeDecodeError, ValueError) as e:
+                        log.debug("entitlements plist parse error: %s", e)
                 break
 
     return entitlements
 
 
 def parse_code_resources(app: Path) -> dict:
+    """Parse _CodeSignature/CodeResources and return presence, file count, and signature version."""
     cr_path = app / "Contents" / "_CodeSignature" / "CodeResources"
     if not cr_path.exists():
         return {"present": False}
 
-    result = {"present": True, "file_count": 0}
+    result: dict[str, Any] = {"present": True, "file_count": 0}
     try:
-        with open(cr_path, "rb") as f:
+        with cr_path.open("rb") as f:
             cr = plistlib.load(f)
         files = cr.get("files2", cr.get("files", {}))
         result["file_count"] = len(files)
         result["version"] = 2 if "files2" in cr else 1
-    except Exception as e:
+    except (plistlib.InvalidFileException, OSError, KeyError) as e:
+        log.warning("CodeResources parse error: %s", e)
         result["parse_error"] = str(e)
 
     return result
 
 
 def analyze(extract_dir: str, output_path: str) -> None:
+    """Check code signature, entitlements, and flag sensitive permissions; write results to output_path."""
+    setup()
+    log.info("starting")
     root = Path(extract_dir)
     app = find_app(root)
 
-    result = {
+    result: dict[str, Any] = {
         "app_found": app is not None,
         "signed": False,
         "notarized": None,
@@ -96,41 +104,42 @@ def analyze(extract_dir: str, output_path: str) -> None:
         "com.apple.security.network.client": "low",
     }
 
+    out_path = Path(output_path)
     if not app:
-        with open(output_path, "w") as f:
+        log.warning("no .app bundle found")
+        with out_path.open("w") as f:
             json.dump(result, f, indent=2)
         return
 
-    # CodeResources presence = was signed at some point
     cr = parse_code_resources(app)
     result["code_resources"] = cr
     result["signed"] = cr.get("present", False)
+    log.info("signed=%s CodeResources files=%s", result["signed"], cr.get("file_count"))
 
-    # Entitlements
     entitlements = parse_entitlements(app)
     result["entitlements"] = entitlements
 
-    # Flag sensitive entitlements
     for key, severity in SENSITIVE_ENTITLEMENTS.items():
         if key in entitlements:
-            result["sensitive_entitlements"].append({
-                "entitlement": key,
-                "value": entitlements[key],
-                "severity": severity,
-            })
+            result["sensitive_entitlements"].append(
+                {
+                    "entitlement": key,
+                    "value": entitlements[key],
+                    "severity": severity,
+                }
+            )
 
-    # Hardened runtime — present if CS_RUNTIME flag set; approximate via entitlements
-    # com.apple.security.cs.* keys only exist when hardened runtime is on
+    if result["sensitive_entitlements"]:
+        log.warning("sensitive entitlements: %d", len(result["sensitive_entitlements"]))
+
     if any(k.startswith("com.apple.security.cs.") for k in entitlements):
         result["hardened_runtime"] = True
 
-    # Notarization check — look for ticket in Contents
-    ticket_path = app / "Contents" / "CodeResources"
-    stapled = (app / "Contents" / "_CodeSignature" / "CodeDirectory").exists()
     result["notarized"] = "unknown_no_codesign_tool"
 
-    with open(output_path, "w") as f:
+    with out_path.open("w") as f:
         json.dump(result, f, indent=2)
+    log.info("done")
 
 
 if __name__ == "__main__":

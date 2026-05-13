@@ -11,14 +11,29 @@
     "vscode": {
       "extensions": [
         "ms-python.python",
-        "ms-python.pylint",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "charliermarsh.ruff",
+        "ms-python.mypy-type-checker",
         "timonwong.shellcheck",
         "foxundermoon.shell-format"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/bin/python3"
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit"
+        },
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter"
+        },
+        "ruff.lint.run": "onSave",
+        "mypy-type-checker.importStrategy": "fromEnvironment"
       }
     }
+  },
+  "remoteEnv": {
+    "PYTHONPATH": "${containerWorkspaceFolder}/src"
   },
   "remoteUser": "vscode"
 }

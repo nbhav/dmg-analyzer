@@ -20,7 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=uv /uv /usr/local/bin/uv
 
 ENV UV_BREAK_SYSTEM_PACKAGES=1
-RUN uv pip install --system --no-cache macholib
+RUN uv pip install --system --no-cache \
+    macholib \
+    black \ 
+    isort \
+    ruff \
+    mypy
 
-RUN useradd -m -u 1000 -s /bin/bash vscode \
+RUN useradd -m -s /bin/bash vscode \
     && echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers

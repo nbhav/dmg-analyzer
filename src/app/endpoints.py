@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-05_endpoints.py
-Extracts all hardcoded network endpoints from the bundle:
-URLs, domains, IPs, WebSocket endpoints, and API base URLs.
-"""
 import ipaddress
 import json
 import re
@@ -11,28 +6,54 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from utils.log import get_logger, setup
 
-URL_PATTERN     = re.compile(r"https?://[a-zA-Z0-9._\-/:%?=&@#~+]+")
-WSS_PATTERN     = re.compile(r"wss?://[a-zA-Z0-9._\-/:%?=&@#~+]+")
-IP_PATTERN      = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b")
-DOMAIN_PATTERN  = re.compile(r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+(?:com|io|dev|app|net|org|co|ai|cloud|workers\.dev|supabase\.co|sentry\.io)\b")
+log = get_logger("endpoints")
+
+
+URL_PATTERN = re.compile(r"https?://[a-zA-Z0-9._\-/:%?=&@#~+]+")
+WSS_PATTERN = re.compile(r"wss?://[a-zA-Z0-9._\-/:%?=&@#~+]+")
+IP_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b")
+DOMAIN_PATTERN = re.compile(
+    r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+(?:com|io|dev|app|net|org|co|ai|cloud|workers\.dev|supabase\.co|sentry\.io)\b"
+)
 
 SKIP_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".icns", ".car",
-    ".mp3", ".mp4", ".mov", ".wav", ".dylib", ".so", ".a",
-    ".nib", ".xib", ".zip", ".gz", ".tar", ".ttf", ".otf",
-    ".sqlite", ".db",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".icns",
+    ".car",
+    ".mp3",
+    ".mp4",
+    ".mov",
+    ".wav",
+    ".dylib",
+    ".so",
+    ".a",
+    ".nib",
+    ".xib",
+    ".zip",
+    ".gz",
+    ".tar",
+    ".ttf",
+    ".otf",
+    ".sqlite",
+    ".db",
 }
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Domains / URL prefixes to flag as privacy-relevant
 TRACKING_DOMAINS = {
-    "posthog.com", "us.i.posthog.com",
+    "posthog.com",
+    "us.i.posthog.com",
     "sentry.io",
     "mixpanel.com",
     "amplitude.com",
-    "segment.io", "segment.com",
+    "segment.io",
+    "segment.com",
     "datadog.com",
     "newrelic.com",
     "analytics.google.com",
@@ -54,6 +75,7 @@ THIRD_PARTY_AI = {
 
 
 def is_valid_ip(s: str) -> bool:
+    """Return True if the string is a routable (non-loopback, non-private) IP address."""
     ip = s.split(":")[0]
     try:
         addr = ipaddress.ip_address(ip)
@@ -63,25 +85,30 @@ def is_valid_ip(s: str) -> bool:
 
 
 def is_readable(path: Path) -> bool:
+    """Return True if the file is small enough and appears to be text (heuristic byte scan)."""
     if path.suffix.lower() in SKIP_EXTENSIONS:
         return False
     if path.stat().st_size > MAX_FILE_SIZE:
         return False
     try:
-        with open(path, "rb") as f:
+        with path.open("rb") as f:
             chunk = f.read(512)
         non_printable = sum(1 for b in chunk if b < 9 or (13 < b < 32) or b > 126)
         return (non_printable / max(len(chunk), 1)) < 0.30
-    except Exception:
+    except (OSError, PermissionError) as e:
+        log.debug("cannot read %s: %s", path.name, e)
         return False
 
 
 def analyze(extract_dir: str, output_path: str) -> None:
+    """Scan all text files for URLs, IPs, and domains; classify tracking and AI API endpoints."""
+    setup()
+    log.info("starting")
     root = Path(extract_dir)
 
     all_urls = set()
-    all_wss  = set()
-    all_ips  = set()
+    all_wss = set()
+    all_ips = set()
     all_domains = set()
 
     for path in root.rglob("*"):
@@ -89,7 +116,8 @@ def analyze(extract_dir: str, output_path: str) -> None:
             continue
         try:
             content = path.read_text(errors="replace")
-        except Exception:
+        except (OSError, PermissionError) as e:
+            log.debug("skipping %s: %s", path.name, e)
             continue
 
         all_urls.update(URL_PATTERN.findall(content))
@@ -100,15 +128,15 @@ def analyze(extract_dir: str, output_path: str) -> None:
             if is_valid_ip(ip_match):
                 all_ips.add(ip_match)
 
-    # Categorize URLs
     tracking = []
-    ai_apis  = []
-    other    = []
+    ai_apis = []
+    other = []
 
     for url in sorted(all_urls):
         try:
-            host = urlparse(url).netloc.lower().lstrip("www.")
-        except Exception:
+            host = urlparse(url).netloc.lower().removeprefix("www.")
+        except ValueError as e:
+            log.debug("url parse error %s: %s", url[:60], e)
             host = ""
         entry = {"url": url, "host": host}
 
@@ -119,24 +147,38 @@ def analyze(extract_dir: str, output_path: str) -> None:
         else:
             other.append(entry)
 
+    if tracking:
+        log.warning("tracking endpoints: %d", len(tracking))
+    if ai_apis:
+        log.info("AI API endpoints: %d", len(ai_apis))
+
+    log.info(
+        "urls=%d wss=%d ips=%d domains=%d",
+        len(all_urls),
+        len(all_wss),
+        len(all_ips),
+        len(all_domains),
+    )
+
     result = {
         "summary": {
-            "total_urls":       len(all_urls),
-            "websocket_urls":   len(all_wss),
-            "external_ips":     len(all_ips),
+            "total_urls": len(all_urls),
+            "websocket_urls": len(all_wss),
+            "external_ips": len(all_ips),
             "tracking_services": len(tracking),
             "ai_api_endpoints": len(ai_apis),
         },
         "tracking_services": tracking,
-        "ai_api_endpoints":  ai_apis,
-        "websocket_urls":    sorted(all_wss),
-        "external_ips":      sorted(all_ips),
-        "all_urls":          sorted(other),
-        "all_domains":       sorted(all_domains),
+        "ai_api_endpoints": ai_apis,
+        "websocket_urls": sorted(all_wss),
+        "external_ips": sorted(all_ips),
+        "all_urls": sorted(other, key=lambda x: x["url"]),
+        "all_domains": sorted(all_domains),
     }
 
-    with open(output_path, "w") as f:
+    with Path(output_path).open("w") as f:
         json.dump(result, f, indent=2)
+    log.info("done")
 
 
 if __name__ == "__main__":
