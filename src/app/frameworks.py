@@ -19,25 +19,32 @@ KNOWN_SDKS = [
     ("FullStory", "analytics", "high", "Session replay and screen recording"),
     ("LogRocket", "analytics", "high", "Session replay"),
     ("Datadog", "monitoring", "low", "APM and monitoring"),
+
     # Crash reporting
     ("Sentry", "crash", "low", "Crash reporting and error tracking"),
     ("Crashlytics", "crash", "low", "Firebase crash reporting"),
     ("PLCrashReporter", "crash", "low", "Crash reporting library"),
     ("Bugsnag", "crash", "low", "Crash and error monitoring"),
+
     # Auto-update
     ("Sparkle", "update", "medium", "Auto-update framework — update feed can be hijacked"),
+
     # Networking
     ("Alamofire", "networking", "low", "HTTP networking library"),
     ("AFNetworking", "networking", "low", "HTTP networking library"),
+
     # Auth
     ("Auth0", "auth", "low", "Authentication platform"),
     ("Supabase", "auth", "low", "Auth and database backend"),
+
     # AI / ML
     ("CoreML", "ai", "low", "Apple on-device ML"),
     ("TensorFlow", "ai", "low", "ML framework"),
+
     # Screen / accessibility
     ("ScreenCaptureKit", "screen", "high", "Screen capture framework"),
     ("Accessibility", "access", "high", "Accessibility/automation APIs"),
+
     # Ad / tracking
     ("Google Mobile Ads", "ads", "high", "Google advertising SDK"),
     ("Facebook", "ads", "high", "Meta/Facebook SDK"),
@@ -113,7 +120,3 @@ def analyze(extract_dir: str, output_path: str) -> None:
     with Path(output_path).open("w") as f:
         json.dump(result, f, indent=2)
     log.info("done")
-
-
-if __name__ == "__main__":
-    analyze(sys.argv[1], sys.argv[2])

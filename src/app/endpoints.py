@@ -2,7 +2,6 @@
 import ipaddress
 import json
 import re
-import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -180,6 +179,3 @@ def analyze(extract_dir: str, output_path: str) -> None:
         json.dump(result, f, indent=2)
     log.info("done")
 
-
-if __name__ == "__main__":
-    analyze(sys.argv[1], sys.argv[2])

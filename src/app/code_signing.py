@@ -2,7 +2,6 @@
 import json
 import plistlib
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -140,7 +139,3 @@ def analyze(extract_dir: str, output_path: str) -> None:
     with out_path.open("w") as f:
         json.dump(result, f, indent=2)
     log.info("done")
-
-
-if __name__ == "__main__":
-    analyze(sys.argv[1], sys.argv[2])

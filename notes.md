@@ -10,6 +10,11 @@
 7) Update readme 
 8) add local caches to gitignore if not already present
 9) add python linting to precommit and shell script linting
+10) Need to add package lock
+11) Migrate to argparse 
+12) Fix stupid output messages 
+13) Use unified logger an add timestamp + file name & line
+
 
 
 

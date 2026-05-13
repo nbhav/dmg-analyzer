@@ -30,7 +30,6 @@
         "[python]": {
           "editor.defaultFormatter": "ms-python.black-formatter"
         },
-        "ruff.lint.run": "onSave",
         "mypy-type-checker.importStrategy": "fromEnvironment"
       }
     }

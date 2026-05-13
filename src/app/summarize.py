@@ -208,7 +208,3 @@ def analyze(dmg_name: str, output_dir: str) -> None:
         len(summary["findings"]["high"]),
         len(summary["findings"]["medium"]),
     )
-
-
-if __name__ == "__main__":
-    analyze(sys.argv[1], sys.argv[2])

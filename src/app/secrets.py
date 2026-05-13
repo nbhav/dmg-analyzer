@@ -23,12 +23,15 @@ PATTERNS = [
     ("github_token", "critical", re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}")),
     ("stripe_secret", "critical", re.compile(r"sk_live_[A-Za-z0-9]{24,}")),
     ("stripe_publishable", "low", re.compile(r"pk_live_[A-Za-z0-9]{24,}")),
+
     # Auth / tokens
     ("jwt", "high", re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")),
     ("bearer_token", "high", re.compile(r"(?i)bearer\s+[A-Za-z0-9_\-\.]{20,}")),
+
     # Monitoring / analytics
     ("sentry_dsn", "medium", re.compile(r"https://[a-f0-9]{32}@[a-z0-9.]*sentry\.io/\d+")),
     ("posthog_key", "medium", re.compile(r"phc_[A-Za-z0-9]{30,}")),
+
     # Backend / DB
     (
         "supabase_anon_key",
@@ -38,9 +41,11 @@ PATTERNS = [
     ("supabase_service_role", "critical", re.compile(r"(?i)service.?role.{0,30}eyJ[A-Za-z0-9_-]+")),
     ("postgres_url", "high", re.compile(r"postgres(?:ql)?://[^'\"\s]+")),
     ("mongodb_url", "high", re.compile(r"mongodb(?:\+srv)?://[^'\"\s]+")),
+
     # Private keys
     ("private_key_pem", "critical", re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----")),
     ("ssh_private_key", "critical", re.compile(r"-----BEGIN OPENSSH PRIVATE KEY-----")),
+
     # Generic high-entropy
     (
         "generic_secret",
