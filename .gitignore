@@ -6,7 +6,6 @@
 
 # DMG test artifacts
 *.tar.gz
-*.dmg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
