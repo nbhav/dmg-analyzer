@@ -3,6 +3,7 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Ubuntu installs
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     p7zip-full \
@@ -20,8 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=uv /uv /usr/local/bin/uv
 
 ENV UV_BREAK_SYSTEM_PACKAGES=1
+
+# Linter installs
 RUN uv pip install --system --no-cache \
-    macholib \
     black \ 
     isort \
     ruff \

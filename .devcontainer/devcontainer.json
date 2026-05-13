@@ -6,6 +6,9 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached"
+  ],
   "postCreateCommand": "docker build -f ${containerWorkspaceFolder}/Containerfile -t dmg-analyzer ${containerWorkspaceFolder}",
   "customizations": {
     "vscode": {
