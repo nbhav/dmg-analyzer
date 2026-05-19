@@ -4,6 +4,9 @@ Static security analysis for macOS DMG files. Runs entirely inside an isolated
 container with no network access. DMG is piped in via stdin — no bind mount
 on the input side.
 
+The idea behind this repo is to isolate an analyze any dmg that is being used so that 
+better decisions can be made about whether or not to install the dmg.
+
 ## Requirements
 
 - macOS 26+ (Apple Silicon) — uses `container` CLI

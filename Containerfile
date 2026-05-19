@@ -1,3 +1,6 @@
+
+
+
 FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM ubuntu:24.04
 
@@ -23,6 +26,8 @@ RUN uv pip install --system \
 # Non-root analyst user
 RUN useradd -m -u 1000 analyst
 USER analyst
+
+ENV PYTHONPATH=/work/src
 
 WORKDIR /work
 COPY --chown=analyst:analyst scripts/ ./scripts/

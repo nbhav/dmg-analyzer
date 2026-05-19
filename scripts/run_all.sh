@@ -8,6 +8,8 @@ EXTRACT="/tmp/extracted"
 OUTPUT="/output"
 DMG_PATH="/tmp/target.dmg"
 
+export PYTHONPATH="/work/src"
+
 mkdir -p "$EXTRACT"
 
 # Read DMG from stdin into ephemeral container storage
@@ -52,33 +54,12 @@ find "$EXTRACT" -type l | while read -r link; do
   fi
 done
 
-# ── Run analysis modules ──────────────────────────────────────────────────────
-run_module() {
-  local label="$1"
-  local script="$2"
-  local outfile="$3"
-  echo "[*] Running: $label"
-  python3 "src/$script" "$EXTRACT" "$outfile" 2>/dev/null \
-    || echo '{"error":"module_failed","module":"'"$label"'"}' > "$outfile"
-}
+# ── Run analysis pipeline ─────────────────────────────────────────────────────
+echo "[*] Running analysis pipeline..."
+python3 /work/src/main.py \
+  --dmg-name "$DMG_NAME" \
+  --extract-dir "$EXTRACT" \
+  --output-dir "$OUTPUT" \
+  2>>"$OUTPUT/analyzer.log"
 
-run_module "bundle_structure" "bundle_structure.py" "$OUTPUT/00_bundle_structure.json"
-run_module "binary_info"      "binary_info.py"      "$OUTPUT/01_binary_info.json"
-run_module "code_signing"     "code_signing.py"     "$OUTPUT/02_code_signing.json"
-run_module "plist_audit"      "plist_audit.py"      "$OUTPUT/03_plist_audit.json"
-run_module "secrets"          "secrets.py"          "$OUTPUT/04_secrets.json"
-run_module "endpoints"        "endpoints.py"        "$OUTPUT/05_endpoints.json"
-run_module "frameworks"       "frameworks.py"       "$OUTPUT/06_frameworks.json"
-
-# Raw strings dump from all executables
-echo "[*] Extracting strings..."
-find "$EXTRACT" -type f \( -perm /111 -o -name "*.dylib" \) \
-  | xargs -I{} strings -a {} 2>/dev/null \
-  | sort -u \
-  > "$OUTPUT/07_strings.txt"
-
-# Summary rollup
-echo "[*] Building summary..."
-python3 src/summarize.py "$DMG_NAME" "$OUTPUT"
-
-echo "[*] Analysis complete"
+echo "[*] Analysis complete — logs: $OUTPUT/analyzer.log"

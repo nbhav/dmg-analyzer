@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""
-03_plist_audit.py
-Audits all plist files in the bundle:
-- Info.plist: permissions, URL schemes, hardcoded endpoints/keys
-- All other plists: surface embedded config, keys, URLs
-"""
 import json
 import plistlib
 import re
 import sys
 from pathlib import Path
+from typing import Any
+
+from utils.log import get_logger, setup
+
+log = get_logger("plist_audit")
 
 
 PERMISSION_KEYS = [
@@ -28,7 +27,6 @@ PERMISSION_KEYS = [
     "NSAccessibilityUsageDescription",
 ]
 
-# Patterns that suggest hardcoded secrets in plist values
 SECRET_PATTERNS = [
     (re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "jwt"),
     (re.compile(r"phc_[A-Za-z0-9]{20,}"), "posthog_key"),
@@ -40,22 +38,24 @@ SECRET_PATTERNS = [
 URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+|wss?://[^\s\"'<>]+")
 
 
-def plist_to_dict(path: Path) -> dict | None:
+def plist_to_dict(path: Path) -> dict[str, Any] | None:
+    """Parse a plist file (binary or XML) and return its contents as a dict, or None on failure."""
     try:
-        with open(path, "rb") as f:
-            return plistlib.load(f)
-    except Exception:
-        # Try converting XML plist
+        with path.open("rb") as f:
+            return plistlib.load(f)  # type: ignore[no-any-return]
+    except (plistlib.InvalidFileException, OSError) as e:
+        log.debug("binary plist parse failed for %s, trying text: %s", path.name, e)
         try:
-            with open(path, "r", errors="replace") as f:
+            with path.open(errors="replace") as f:
                 content = f.read()
-            return plistlib.loads(content.encode())
-        except Exception:
+            return plistlib.loads(content.encode())  # type: ignore[no-any-return]
+        except (plistlib.InvalidFileException, UnicodeDecodeError, ValueError) as e:
+            log.debug("text plist parse failed for %s: %s", path.name, e)
             return None
 
 
-def flatten(obj, prefix="") -> dict:
-    """Flatten nested plist into dot-notation dict."""
+def flatten(obj: Any, prefix: str = "") -> dict[str, Any]:
+    """Recursively flatten a nested dict/list structure into dot-notation keys."""
     items = {}
     if isinstance(obj, dict):
         for k, v in obj.items():
@@ -69,8 +69,10 @@ def flatten(obj, prefix="") -> dict:
 
 
 def audit_plist(path: Path, root: Path) -> dict:
+    """Extract permissions, hardcoded secrets, and URLs from a single plist file."""
     data = plist_to_dict(path)
     if data is None:
+        log.debug("failed to parse: %s", path.relative_to(root))
         return {"path": str(path.relative_to(root)), "error": "parse_failed"}
 
     flat = flatten(data)
@@ -84,27 +86,25 @@ def audit_plist(path: Path, root: Path) -> dict:
     for key, value in flat.items():
         val_str = str(value)
 
-        # Permissions
         base_key = key.split(".")[-1]
         if base_key in PERMISSION_KEYS:
             permissions[base_key] = val_str
 
-        # Secret patterns
         for pattern, label in SECRET_PATTERNS:
             if pattern.search(val_str) or pattern.search(key):
                 preview = val_str[:60] + "..." if len(val_str) > 60 else val_str
-                hardcoded_secrets.append({
-                    "key": key,
-                    "type": label,
-                    "value_preview": preview,
-                })
+                hardcoded_secrets.append(
+                    {
+                        "key": key,
+                        "type": label,
+                        "value_preview": preview,
+                    }
+                )
                 break
 
-        # URLs
         found_urls = URL_PATTERN.findall(val_str)
         urls.extend(found_urls)
 
-        # All string values for raw inspection
         if isinstance(value, str):
             raw_keys[key] = value
 
@@ -118,8 +118,12 @@ def audit_plist(path: Path, root: Path) -> dict:
 
 
 def analyze(extract_dir: str, output_path: str) -> None:
+    """Audit all plist files under extract_dir and write a JSON report to output_path."""
+    setup()
+    log.info("starting")
     root = Path(extract_dir)
     plists = list(root.rglob("*.plist"))
+    log.info("found %d plist files", len(plists))
 
     results = []
     permissions_summary = {}
@@ -135,6 +139,15 @@ def analyze(extract_dir: str, output_path: str) -> None:
         all_secrets.extend(audit.get("hardcoded_secrets", []))
         all_urls.extend(audit.get("urls", []))
 
+    if all_secrets:
+        log.warning("hardcoded secrets found: %d", len(all_secrets))
+    log.info(
+        "permissions=%d secrets=%d urls=%d",
+        len(permissions_summary),
+        len(all_secrets),
+        len(set(all_urls)),
+    )
+
     output = {
         "plist_count": len(plists),
         "permissions_summary": permissions_summary,
@@ -143,9 +156,6 @@ def analyze(extract_dir: str, output_path: str) -> None:
         "plists": results,
     }
 
-    with open(output_path, "w") as f:
+    with Path(output_path).open("w") as f:
         json.dump(output, f, indent=2)
-
-
-if __name__ == "__main__":
-    analyze(sys.argv[1], sys.argv[2])
+    log.info("done")
